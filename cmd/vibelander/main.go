@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
@@ -21,6 +22,7 @@ const (
 	ScreenW      = 1280
 	ScreenH      = 860
 	SegW         = 10 // terrain horizontal resolution
+	MaxLives     = 3
 	Gravity      = 0.02
 	MainThrust   = 0.05
 	SideThrust   = 0.03
@@ -58,16 +60,19 @@ type Star struct {
 }
 
 type Game struct {
-	lander   Lander
-	terrain  []float64
-	padStart int
-	padEnd   int
-	padY     float64
+	lander    Lander
+	lives     int
+	substract int
+	terrain   []float64
+	padStart  int
+	padEnd    int
+	padY      float64
 
-	level   int
-	fuel    float64
-	landed  bool
-	crashed bool
+	level    int
+	fuel     float64
+	landed   bool
+	crashed  bool
+	gameover bool
 
 	stars     []*Star
 	starTimer int
@@ -114,8 +119,9 @@ func NewGame() *Game {
 	}
 
 	g := &Game{
-		level: 1,
-		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
+		level:    1,
+		lives:    MaxLives,
+		rng:      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	g.initGame()
 	return g
@@ -133,6 +139,7 @@ func (g *Game) initGame() {
 	g.fuel = InitialFuel
 	g.landed = false
 	g.crashed = false
+	g.substract = 1
 
 	// create terrain
 	nSeg := ScreenW / SegW
@@ -198,7 +205,7 @@ func (g *Game) spawnStar() {
 func (g *Game) Update() error {
 	// Input: if crashed show R restart; if landed show N next level handled in KeyPressed
 	// Physics updates only when not landed/crashed
-	if !g.landed && !g.crashed {
+	if !g.landed && !g.crashed && !g.gameover {
 		// gravity
 		g.lander.vy += Gravity
 
@@ -276,14 +283,14 @@ func (g *Game) Update() error {
 			}
 			if st.y > g.terrain[idx]-5 {
 				// bounce
-				if idx + 1 >= len(g.terrain) {
+				if idx+1 >= len(g.terrain) {
 					idx = idx - 1
 				}
 				y2 := g.terrain[idx+1]
 				y1 := g.terrain[idx]
 				x2 := idx + 10
 				x1 := idx
-				if int(st.x) < idx && idx - 1 > -1 {
+				if int(st.x) < idx && idx-1 > -1 {
 					y2 = g.terrain[idx]
 					y1 = g.terrain[idx-1]
 					x2 = idx
@@ -327,6 +334,12 @@ func (g *Game) Update() error {
 	// (Ebiten recommends checking IsKeyPressed in Update; but we want key-down events for R/N — we'll implement a small edge detector)
 	// For simplicity, allow pressing R or N anytime (but only trigger when appropriate)
 	if ebiten.IsKeyPressed(ebiten.KeyR) && g.crashed {
+		g.initGame()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyR) && g.gameover {
+		g.gameover = false
+		g.level = 1
+		g.lives = MaxLives
 		g.initGame()
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyN) && g.landed {
@@ -432,15 +445,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		vector.StrokeLine(screen, float32(px-s/2), float32(py), float32(px-s/2-5-g.rng.Float64()*6), float32(py), 1, color.RGBA{255, 80, 0, 255}, false)
 	}
 
-	// HUD
-	hudTextDrawOptions.GeoM.Translate(ScreenW-100, 20)
-	text.Draw(screen, fmt.Sprintf("LEVEL: %d", g.level), textFontGoXFace, hudTextDrawOptions)
-	hudTextDrawOptions.GeoM.Translate(0, 20)
-	text.Draw(screen, fmt.Sprintf("FUEL: %d", int(g.fuel+0.5)), textFontGoXFace, hudTextDrawOptions)
-	hudTextDrawOptions.GeoM.Translate(0, 20)
-	text.Draw(screen, fmt.Sprintf("VEL: %.2f", g.lander.vy), textFontGoXFace, hudTextDrawOptions)
-	hudTextDrawOptions.GeoM.Reset()
-
 	// Status messages
 	if g.landed {
 		landedTextDrawOptions.GeoM.Translate(ScreenW/2-100, ScreenH/2-50)
@@ -449,11 +453,33 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		text.Draw(screen, "Press N for Next Level", textFontGoXFace, landedTextDrawOptions)
 		landedTextDrawOptions.GeoM.Reset()
 	}
-	if g.crashed {
+	if g.crashed && !g.gameover {
+		g.lives -= g.substract
+		g.substract = 0
 		crashTextDrawOptions.GeoM.Translate(ScreenW/2-100, ScreenH/2-50)
 		text.Draw(screen, "CRASH!", textFontGoXFace, crashTextDrawOptions)
 		crashTextDrawOptions.GeoM.Translate(0, 20)
-		text.Draw(screen, "Press R to Restart", textFontGoXFace, crashTextDrawOptions)
+		text.Draw(screen, "Press R to Restart level", textFontGoXFace, crashTextDrawOptions)
+		crashTextDrawOptions.GeoM.Reset()
+	}
+
+	// HUD
+	hudTextDrawOptions.GeoM.Translate(ScreenW-100, 20)
+	text.Draw(screen, fmt.Sprintf("LEVEL: %d", g.level), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("FUEL: %d", int(g.fuel+0.5)), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("VEL: %.2f", g.lander.vy), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("LIVES:%s", strings.Repeat("|", g.lives)), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Reset()
+
+	if g.lives == 0 {
+		g.gameover = true
+		crashTextDrawOptions.GeoM.Translate(ScreenW/2-100, ScreenH/2-50)
+		text.Draw(screen, "GAMEOVER!", textFontGoXFace, crashTextDrawOptions)
+		crashTextDrawOptions.GeoM.Translate(0, 20)
+		text.Draw(screen, "Press R to Restart game", textFontGoXFace, crashTextDrawOptions)
 		crashTextDrawOptions.GeoM.Reset()
 	}
 }

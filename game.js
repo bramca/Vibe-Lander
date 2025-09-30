@@ -5,8 +5,11 @@ let gravity = 0.02;;
 let thrust = 0.05;
 let landed = false;
 let crashed = false;
+let gameover = false;
 let padStart, padEnd, padY;
 let level = 1;
+let lives = 3;
+let substract = 1;
 let stars = [];
 let starTimer = 0;
 let maxStars = 0;
@@ -31,6 +34,7 @@ function initGame() {
 	fuel = 100;
 	landed = false;
 	crashed = false;
+	substract = 1;
 	terrain = [];
 	stars = [];
 	starTimer = 0;
@@ -96,7 +100,7 @@ function draw() {
 	}
 	endShape();
 
-	if (!landed && !crashed) {
+	if (!landed && !crashed && !gameover) {
 		// Apply gravity
 		lander.vy += gravity;
 
@@ -255,9 +259,10 @@ function draw() {
 	noStroke();
 	fill(0, 255, 0);
 	textSize(12);
-	text("LEVEL: " + level, width - 100, 20);
-	text("FUEL: " + nf(fuel, 1, 0), 10, 20);
-	text("VEL: " + nf(lander.vy, 1, 2), 10, 40);
+	text("LEVEL: " + level, 10, 20);
+	text("FUEL: " + nf(fuel, 1, 0), 10, 40);
+	text("VEL: " + nf(lander.vy, 1, 2), 10, 60);
+	text("LIVES: " + "| ".repeat(lives), 10, 80);
 
 	if (landed) {
 		fill(0, 255, 0);
@@ -265,14 +270,29 @@ function draw() {
 		text("Press N for Next Level", width / 2 - 80, height / 2 + 20);
 	}
 	if (crashed) {
+		lives -= substract;
+		substract = 0;
 		fill(255, 0, 0);
 		text("CRASH!", width / 2 - 20, height / 2);
-		text("Press R to Restart", width / 2 - 60, height / 2 + 20);
+		text("Press R to Restart level", width / 2 - 60, height / 2 + 20);
+	}
+
+	if (lives == 0) {
+		gameover = true;
+		fill(255, 0, 0);
+		text("GAME OVER!", width / 2 - 20, height / 2);
+		text("Press R to Restart game", width / 2 - 60, height / 2 + 20);
 	}
 }
 
 function keyPressed() {
 	if (crashed && key === "r") {
+		initGame();
+	}
+	if (gameover && key === "r") {
+		gameover = false;
+		lives = 3;
+		level = 1;
 		initGame();
 	}
 	if (landed && key === "n") {
