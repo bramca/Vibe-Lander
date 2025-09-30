@@ -10,7 +10,11 @@ And a `go` version as well!
 😎 Completely vibe coded! 🔥
 
 # How to run
+
 You can run this game by opening the [index.html](./index.html) in your browser or you can run a simple http server in the root folder of this repo e.g. (in python) `python -m http.server`
+
+`go install github.com/bramca/Vibe-Lander/cmd/vibelander@latest`
+`vibelander`
 
 # Controls
 `arrow up` hold to thrust upward.<br>

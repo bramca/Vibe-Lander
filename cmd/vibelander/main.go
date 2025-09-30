@@ -114,7 +114,7 @@ func NewGame() *Game {
 	}
 
 	g := &Game{
-		level: 5,
+		level: 1,
 		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	g.initGame()
