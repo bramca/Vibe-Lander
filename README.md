@@ -1,6 +1,11 @@
-# Vibe Lander
+# Vibe lander
+`js`
 ![vibe lander game](./img/vibe-lander.png)
-A `javascript` / `html` version of the 1979 Atari game [Lunar Lander](https://en.wikipedia.org/wiki/Lunar_Lander_%281979_video_game%29)<br>
+`go`
+![vibe lander game go](./img/vibe-lander-go.png)
+A `javascript` / `html` of the 1979 Atari game [Lunar Lander](https://en.wikipedia.org/wiki/Lunar_Lander_%281979_video_game%29)<br>
+
+And a `go` version as well!
 
 😎 Completely vibe coded! 🔥
 

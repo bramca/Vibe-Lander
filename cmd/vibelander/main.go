@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -9,34 +8,53 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"golang.org/x/image/font/basicfont"
-	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
+
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 const (
 	ScreenW      = 1280
 	ScreenH      = 860
-	SegW         = 10                 // terrain horizontal resolution
+	SegW         = 10 // terrain horizontal resolution
 	Gravity      = 0.02
 	MainThrust   = 0.05
 	SideThrust   = 0.03
 	InitialFuel  = 100.0
-	CraterDepth  = 10.0               // how much terrain y increases on damage (larger y is lower)
-	SpawnMinYGap = 50                 // spawn at least this much above terrain
+	CraterDepth  = 10.0 // how much terrain y increases on damage (larger y is lower)
+	SpawnMinYGap = 50   // spawn at least this much above terrain
+)
+
+var (
+	textFont            font.Face
+	textFontGoXFace     *text.GoXFace
+	hudTextGeoMatrix    ebiten.GeoM
+	landedTextGeoMatrix ebiten.GeoM
+	crashTextGeoMatrix  ebiten.GeoM
+
+	hudTextColorScale    = ebiten.ColorScale{}
+	landedTextColorScale = ebiten.ColorScale{}
+	crashTextColorScale  = ebiten.ColorScale{}
+
+	hudTextDrawOptions    *text.DrawOptions
+	landedTextDrawOptions *text.DrawOptions
+	crashTextDrawOptions  *text.DrawOptions
 )
 
 type Lander struct {
-	x, y float64
+	x, y   float64
 	vx, vy float64
-	size float64
+	size   float64
 }
 
 type Star struct {
-	x, y float64
+	x, y   float64
 	vx, vy float64
-	size float64
+	size   float64
 }
 
 type Game struct {
@@ -46,21 +64,57 @@ type Game struct {
 	padEnd   int
 	padY     float64
 
-	level    int
-	fuel     float64
-	landed   bool
-	crashed  bool
+	level   int
+	fuel    float64
+	landed  bool
+	crashed bool
 
-	stars    []*Star
+	stars     []*Star
 	starTimer int
-	maxStars int
+	maxStars  int
 
 	rng *rand.Rand
 }
 
 func NewGame() *Game {
+	// set fonts
+	tt, _ := opentype.Parse(fonts.ArcadeN_ttf)
+	textFont, _ = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    float64(10),
+		DPI:     72.0,
+		Hinting: font.HintingVertical,
+	})
+	textFontGoXFace = text.NewGoXFace(textFont)
+
+	hudTextGeoMatrix = ebiten.GeoM{}
+	hudTextColorScale.Scale(0, 1.0, 0, 1.0)
+	hudTextDrawOptions = &text.DrawOptions{
+		DrawImageOptions: ebiten.DrawImageOptions{
+			GeoM:       hudTextGeoMatrix,
+			ColorScale: hudTextColorScale,
+		},
+	}
+
+	landedTextGeoMatrix = ebiten.GeoM{}
+	landedTextColorScale.Scale(0, 1.0, 0, 1.0)
+	landedTextDrawOptions = &text.DrawOptions{
+		DrawImageOptions: ebiten.DrawImageOptions{
+			GeoM:       landedTextGeoMatrix,
+			ColorScale: landedTextColorScale,
+		},
+	}
+
+	crashTextGeoMatrix = ebiten.GeoM{}
+	crashTextColorScale.Scale(1.0, 0, 0, 1.0)
+	crashTextDrawOptions = &text.DrawOptions{
+		DrawImageOptions: ebiten.DrawImageOptions{
+			GeoM:       crashTextGeoMatrix,
+			ColorScale: crashTextColorScale,
+		},
+	}
+
 	g := &Game{
-		level: 1,
+		level: 5,
 		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	g.initGame()
@@ -83,11 +137,11 @@ func (g *Game) initGame() {
 	// create terrain
 	nSeg := ScreenW / SegW
 	g.terrain = make([]float64, nSeg)
-	amp := 50.0 + float64(g.level)*10.0
+	amp := 20.0 + float64(g.level)*5.0
 	seed := g.rng.Float64() * 10.0
-	for i := 0; i < nSeg; i++ {
+	for i := range nSeg {
 		// combination of sine waves + small randomness for retro look
-		base := float64(ScreenH) - 100.0
+		base := float64(ScreenH) - 200.0
 		h := base - math.Sin(float64(i)*0.25+seed)*amp - math.Cos(float64(i)*0.13+seed*1.5)*(amp*0.4) + g.rng.Float64()*amp*0.3
 		g.terrain[i] = h
 	}
@@ -201,9 +255,7 @@ func (g *Game) Update() error {
 		if len(g.stars) < g.maxStars {
 			g.starTimer++
 			spawnRate := 120 - g.level*10
-			if spawnRate < 30 {
-				spawnRate = 30
-			}
+			spawnRate = int(math.Max(float64(spawnRate), 30))
 			if g.starTimer > spawnRate {
 				g.spawnStar()
 				g.starTimer = 0
@@ -224,22 +276,25 @@ func (g *Game) Update() error {
 			}
 			if st.y > g.terrain[idx]-5 {
 				// bounce
-				y2 := g.terrain[tx + 1];
-				y1 := g.terrain[tx];
-				x2 := tx + 10;
-				x1 := tx;
-				if (st.x < tx) {
-					y2 = g.terrain[tx];
-					y1 = g.terrain[tx - 1];
-					x2 = tx;
-					x1 = tx - 10;
+				if idx + 1 >= len(g.terrain) {
+					idx = idx - 1
 				}
-				nx := (-1 * (y2 - y1)) / Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-				ny := (x2 - x1) / Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-				b := random(0.5, 1.0); // b=0.0 -> no bounce, b=1.0 -> no loss of speed
-				dotpr := nx * st.vx + ny * st.vy;
-				st.vy = b * ((-2 * dotpr) * ny + st.vy)
-				st.vx = b * ((-2 * dotpr) * nx + st.vx)
+				y2 := g.terrain[idx+1]
+				y1 := g.terrain[idx]
+				x2 := idx + 10
+				x1 := idx
+				if int(st.x) < idx {
+					y2 = g.terrain[idx]
+					y1 = g.terrain[idx-1]
+					x2 = idx
+					x1 = idx - 10
+				}
+				nx := (-1 * (y2 - y1)) / math.Sqrt(float64(x2-x1)*float64(x2-x1)+float64(y2-y1)*float64(y2-y1))
+				ny := float64(x2-x1) / math.Sqrt(float64(x2-x1)*float64(x2-x1)+float64(y2-y1)*float64(y2-y1))
+				b := 0.5 + g.rng.Float64()*0.5 // b=0.0 -> no bounce, b=1.0 -> no loss of speed
+				dotpr := nx*st.vx + ny*st.vy
+				st.vy = b * ((-2*dotpr)*ny + st.vy)
+				st.vx = b * ((-2*dotpr)*nx + st.vx)
 				st.vy *= -1
 				st.y = g.terrain[idx] - 5
 
@@ -326,18 +381,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for i := 0; i < colslice-1; i++ {
 		x1 := float64(i * SegW)
 		y1 := g.terrain[i]
-		x2 := float64((i+1) * SegW)
+		x2 := float64((i + 1) * SegW)
 		y2 := g.terrain[i+1]
-		ebitenutil.DrawLine(screen, x1, y1, x2, y2, color.White)
+		vector.StrokeLine(screen, float32(x1), float32(y1), float32(x2), float32(y2), 1, color.White, false)
 	}
 
 	// highlight pad in green (draw top line over terrain)
 	for i := g.padStart; i <= g.padEnd && i < len(g.terrain)-1; i++ {
 		x1 := float64(i * SegW)
 		y1 := g.terrain[i]
-		x2 := float64((i+1) * SegW)
+		x2 := float64((i + 1) * SegW)
 		y2 := g.terrain[i+1]
-		ebitenutil.DrawLine(screen, x1, y1, x2, y2, color.RGBA{0, 200, 0, 255})
+		vector.StrokeLine(screen, float32(x1), float32(y1), float32(x2), float32(y2), 1, color.RGBA{0, 200, 0, 255}, false)
 	}
 
 	// draw stars (tail + point)
@@ -345,11 +400,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		// tail
 		tx := st.x - st.vx*5
 		ty := st.y - st.vy*5
-		ebitenutil.DrawLine(screen, st.x, st.y, tx, ty, color.RGBA{255, 200, 0, 200})
+		vector.StrokeLine(screen, float32(st.x), float32(st.y), float32(tx), float32(ty), 1, color.RGBA{255, 200, 0, 200}, false)
 		// point (draw small cross or filled-like)
 		sz := st.size
-		ebitenutil.DrawLine(screen, st.x-sz/2, st.y, st.x+sz/2, st.y, color.RGBA{255, 255, 0, 255})
-		ebitenutil.DrawLine(screen, st.x, st.y-sz/2, st.x, st.y+sz/2, color.RGBA{255, 255, 0, 255})
+		vector.StrokeLine(screen, float32(st.x-sz/2), float32(st.y), float32(st.x+sz/2), float32(st.y), 1, color.RGBA{255, 255, 0, 255}, false)
+		vector.StrokeLine(screen, float32(st.x), float32(st.y-sz/2), float32(st.x), float32(st.y+sz/2), 1, color.RGBA{255, 255, 0, 255}, false)
 	}
 
 	// draw lander (retro triangle wireframe)
@@ -360,41 +415,47 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	x1, y1 := px-s/2, py+s/2
 	x2, y2 := px+s/2, py+s/2
 	x3, y3 := px, py-s/2
-	ebitenutil.DrawLine(screen, x1, y1, x2, y2, color.White)
-	ebitenutil.DrawLine(screen, x2, y2, x3, y3, color.White)
-	ebitenutil.DrawLine(screen, x3, y3, x1, y1, color.White)
+	vector.StrokeLine(screen, float32(x1), float32(y1), float32(x2), float32(y2), 1, color.White, false)
+	vector.StrokeLine(screen, float32(x2), float32(y2), float32(x3), float32(y3), 1, color.White, false)
+	vector.StrokeLine(screen, float32(x3), float32(y3), float32(x1), float32(y1), 1, color.White, false)
 
 	// thruster flames when keys pressed
 	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) && g.fuel > 0 && !g.landed && !g.crashed {
 		// two flame lines flicker
-		ebitenutil.DrawLine(screen, px-3, py+s/2, px, py+s/2+5+g.rng.Float64()*6, color.RGBA{255, 80, 0, 255})
-		ebitenutil.DrawLine(screen, px+3, py+s/2, px, py+s/2+5+g.rng.Float64()*6, color.RGBA{255, 80, 0, 255})
+		vector.StrokeLine(screen, float32(px-3), float32(py+s/2), float32(px), float32(py+s/2+5+g.rng.Float64()*6), 1, color.RGBA{255, 80, 0, 255}, false)
+		vector.StrokeLine(screen, float32(px+3), float32(py+s/2), float32(px), float32(py+s/2+5+g.rng.Float64()*6), 1, color.RGBA{255, 80, 0, 255}, false)
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) && g.fuel > 0 && !g.landed && !g.crashed {
-		ebitenutil.DrawLine(screen, px+s/2, py, px+s/2+5+g.rng.Float64()*6, py, color.RGBA{255, 80, 0, 255})
+		vector.StrokeLine(screen, float32(px+s/2), float32(py), float32(px+s/2+5+g.rng.Float64()*6), float32(py), 1, color.RGBA{255, 80, 0, 255}, false)
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyArrowRight) && g.fuel > 0 && !g.landed && !g.crashed {
-		ebitenutil.DrawLine(screen, px-s/2, py, px-s/2-5-g.rng.Float64()*6, py, color.RGBA{255, 80, 0, 255})
+		vector.StrokeLine(screen, float32(px-s/2), float32(py), float32(px-s/2-5-g.rng.Float64()*6), float32(py), 1, color.RGBA{255, 80, 0, 255}, false)
 	}
 
 	// HUD
-	txtCol := color.RGBA{0, 255, 0, 255}
-	text.Draw(screen, fmt.Sprintf("LEVEL: %d", g.level), basicfont.Face7x13, ScreenW-100, 20, txtCol)
-	text.Draw(screen, fmt.Sprintf("FUEL: %d", int(g.fuel+0.5)), basicfont.Face7x13, 10, 20, txtCol)
-	text.Draw(screen, fmt.Sprintf("VEL: %.2f", g.lander.vy), basicfont.Face7x13, 10, 40, txtCol)
+	hudTextDrawOptions.GeoM.Translate(ScreenW-100, 20)
+	text.Draw(screen, fmt.Sprintf("LEVEL: %d", g.level), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("FUEL: %d", int(g.fuel+0.5)), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("VEL: %.2f", g.lander.vy), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Reset()
 
 	// Status messages
 	if g.landed {
-		text.Draw(screen, "LANDED SUCCESSFULLY!", basicfont.Face7x13, ScreenW/2-100, ScreenH/2, color.RGBA{0, 255, 0, 255})
-		text.Draw(screen, "Press N for Next Level", basicfont.Face7x13, ScreenW/2-100, ScreenH/2+20, color.RGBA{0, 255, 0, 255})
+		landedTextDrawOptions.GeoM.Translate(ScreenW/2-100, ScreenH/2-50)
+		text.Draw(screen, "LANDED SUCCESSFULLY!", textFontGoXFace, landedTextDrawOptions)
+		landedTextDrawOptions.GeoM.Translate(0, 20)
+		text.Draw(screen, "Press N for Next Level", textFontGoXFace, landedTextDrawOptions)
+		landedTextDrawOptions.GeoM.Reset()
 	}
 	if g.crashed {
-		text.Draw(screen, "CRASH!", basicfont.Face7x13, ScreenW/2-20, ScreenH/2, color.RGBA{255, 0, 0, 255})
-		text.Draw(screen, "Press R to Restart", basicfont.Face7x13, ScreenW/2-80, ScreenH/2+20, color.RGBA{255, 0, 0, 255})
+		crashTextDrawOptions.GeoM.Translate(ScreenW/2-100, ScreenH/2-50)
+		text.Draw(screen, "CRASH!", textFontGoXFace, crashTextDrawOptions)
+		crashTextDrawOptions.GeoM.Translate(0, 20)
+		text.Draw(screen, "Press R to Restart", textFontGoXFace, crashTextDrawOptions)
+		crashTextDrawOptions.GeoM.Reset()
 	}
-
-	// Draw simple instructions top-left (helpful)
-	text.Draw(screen, "Controls: Arrow keys to thrust, R restart when crashed, N next level when landed", basicfont.Face7x13, 10, ScreenH-10, color.RGBA{120, 200, 120, 180})
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

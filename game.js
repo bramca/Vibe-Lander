@@ -1,7 +1,7 @@
 let lander;
 let terrain = [];
 let fuel = 100;
-let gravity = 0.02;
+let gravity = 0.02;;
 let thrust = 0.05;
 let landed = false;
 let crashed = false;
@@ -118,6 +118,20 @@ function draw() {
 		lander.x += lander.vx;
 		lander.y += lander.vy;
 
+		// keep in bounds horizontally
+		if (lander.x < 0) {
+			lander.x = 0
+			lander.vx = 0
+		} else if (lander.x > window.innerWidth) {
+			lander.x = window.innerWidth
+			lander.vx = 0
+		}
+		// simple ceiling
+		if (lander.y < 10) {
+			lander.y = 10
+			lander.vy = 0
+		}
+
 		// Collision detection with terrain
 		let tx = floor(lander.x / 10);
 		if (tx >= 0 && tx < terrain.length) {
@@ -153,6 +167,9 @@ function draw() {
 			// Bounce + damage terrain
 			let tx = constrain(floor(star.x / 10), 0, terrain.length - 1);
 			if (star.y > terrain[tx] - 5) {
+				if (tx + 1 >= terrain.length) {
+					tx = tx - 1;
+				}
 				let y2 = terrain[tx + 1];
 				let y1 = terrain[tx];
 				let x2 = tx + 10;
