@@ -174,7 +174,7 @@ function draw() {
 				let y1 = terrain[tx];
 				let x2 = tx + 10;
 				let x1 = tx;
-				if (star.x < tx) {
+				if (star.x < tx && tx - 1 > -1) {
 					y2 = terrain[tx];
 					y1 = terrain[tx - 1];
 					x2 = tx;

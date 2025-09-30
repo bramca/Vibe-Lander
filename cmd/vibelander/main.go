@@ -283,7 +283,7 @@ func (g *Game) Update() error {
 				y1 := g.terrain[idx]
 				x2 := idx + 10
 				x1 := idx
-				if int(st.x) < idx {
+				if int(st.x) < idx && idx - 1 > -1 {
 					y2 = g.terrain[idx]
 					y1 = g.terrain[idx-1]
 					x2 = idx
