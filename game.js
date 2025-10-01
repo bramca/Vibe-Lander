@@ -258,11 +258,15 @@ function draw() {
 	// HUD
 	noStroke();
 	fill(0, 255, 0);
-	textSize(12);
+	textSize(18);
 	text("LEVEL: " + level, 10, 20);
 	text("FUEL: " + nf(fuel, 1, 0), 10, 40);
 	text("VEL: " + nf(lander.vy, 1, 2), 10, 60);
 	text("LIVES: " + "| ".repeat(lives), 10, 80);
+
+	if (level == 1) {
+		text("arrow left/right: thrust left/right, arrow up: thrust upwards. Try landing on the green landing pad. Good luck!", width/2-400, height - 50)
+	}
 
 	if (landed) {
 		fill(0, 255, 0);

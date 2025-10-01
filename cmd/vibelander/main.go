@@ -445,6 +445,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		vector.StrokeLine(screen, float32(px-s/2), float32(py), float32(px-s/2-5-g.rng.Float64()*6), float32(py), 1, color.RGBA{255, 80, 0, 255}, false)
 	}
 
+	// HUD
+	hudTextDrawOptions.GeoM.Translate(ScreenW-100, 20)
+	text.Draw(screen, fmt.Sprintf("LEVEL: %d", g.level), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("FUEL: %d", int(g.fuel+0.5)), textFontGoXFace, hudTextDrawOptions)
+	hudTextDrawOptions.GeoM.Translate(0, 20)
+	text.Draw(screen, fmt.Sprintf("VEL: %.2f", g.lander.vy), textFontGoXFace, hudTextDrawOptions)
+	if g.level == 1 {
+		hudTextDrawOptions.GeoM.Translate(-ScreenW + 150, ScreenH - 100)
+		text.Draw(screen, "arrow left/right: thrust left/right, arrow up: thrust upwards. Try landing on the green landing pad. Good luck!", textFontGoXFace, hudTextDrawOptions)
+	}
+	hudTextDrawOptions.GeoM.Reset()
+
 	// Status messages
 	if g.landed {
 		landedTextDrawOptions.GeoM.Translate(ScreenW/2-100, ScreenH/2-50)
